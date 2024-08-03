@@ -1,0 +1,81 @@
+import asyncio
+from playwright.async_api import async_playwright
+
+async def run(playwright):
+    browser = await playwright.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+
+    # Navigate to the FitPeo Homepage
+    await page.goto("https://fitpeo.com")
+
+    # Navigate to the Revenue Calculator Page
+    await page.click("text=Revenue Calculator")  # Adjust the selector based on actual page content
+
+    # Wait for the slider and text field to be available
+    slider_selector = "input[type='range']"  # Selector for the slider
+    text_field_selector = "input[type='number']"  # Selector for the text field
+
+    await page.wait_for_selector(slider_selector, timeout=60000)
+    await page.wait_for_selector(text_field_selector, timeout=60000)
+
+    # Adjust the Slider to 820
+    slider_locator = page.locator(slider_selector)
+    await slider_locator.scroll_into_view_if_needed()
+
+    # Use JavaScript to set slider value
+    await slider_locator.evaluate("""(slider, value) => {
+        slider.value = value;
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+    }""", 820)
+
+    # Wait for UI to reflect the change
+    await page.wait_for_timeout(2000)  # Wait for 2 seconds to ensure the UI updates
+
+    # Validate Slider Value is set to 820
+    slider_value = await slider_locator.get_attribute("value")
+    print(f"Slider value after setting: {slider_value}")
+    assert slider_value == "820", f"Slider value is not 820, but {slider_value}"
+
+    # Wait for 2 seconds to ensure the UI updates correctly
+    await page.wait_for_timeout(2000)
+
+    # Update the Text Field to 560
+    await page.fill(text_field_selector, "560")
+    await page.locator(text_field_selector).dispatch_event("change")
+
+    # Validate Text Field Value is updated to 560
+    text_field_value = await page.locator(text_field_selector).input_value()
+    print(f"Text field value: {text_field_value}")
+    assert text_field_value == "560", f"Text field value is not 560, but {text_field_value}"
+
+    # Handle CPT Codes Checkboxes
+    cpt_codes = [
+        ("CPT-99091", "label:has-text('CPT-99091') >> input[type='checkbox']")
+        # Add other CPT codes here similarly if needed
+    ]
+
+    for label_text, checkbox_selector in cpt_codes:
+        checkbox_locator = page.locator(checkbox_selector)
+        await checkbox_locator.scroll_into_view_if_needed()
+
+        # Check if checkbox is selected
+        is_checked = await checkbox_locator.is_checked()
+        if not is_checked:
+            await checkbox_locator.check()  # Use check() method to select the checkbox
+
+    # Validate Total Recurring Reimbursement
+    reimbursement_selector = "div:has-text('Total Recurring Reimbursement for all Patients Per Month') + div p"
+    await page.wait_for_selector(reimbursement_selector, timeout=60000)
+    reimbursement_value = await page.locator(reimbursement_selector).inner_text()
+    print(f"Reimbursement value: {reimbursement_value}")
+    assert reimbursement_value == "$110700", f"Reimbursement value is not $110700, but {reimbursement_value}"
+
+    await browser.close()
+
+async def main():
+    async with async_playwright() as playwright:
+        await run(playwright)
+
+asyncio.run(main())
